@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SentimentIQ — AI Feedback Dashboard</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ─── Reset & Variables ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0d12;
+      --surface:   #13161e;
+      --card:      #191d28;
+      --border:    #252a38;
+      --text:      #e8eaf0;
+      --muted:     #6b7280;
+      --accent:    #6ee7b7;       /* emerald */
+      --pos:       #34d399;
+      --neg:       #f87171;
+      --neu:       #94a3b8;
+      --warn:      #fbbf24;
+      --radius:    14px;
+      --font-head: 'Syne', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 15px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── Layout ─────────────────────────────────────────────────────────── */
+    .shell { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      gap: 6px;
+    }
+    .logo {
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 9px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      transition: all 0.18s ease;
+    }
+    .nav-link:hover { background: var(--border); color: var(--text); }
+    .nav-link.active { background: rgba(110,231,183,0.1); color: var(--accent); }
+    .nav-icon { font-size: 16px; }
+
+    .sidebar-footer {
+      margin-top: auto;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* Main content */
+    .main { flex: 1; padding: 36px 40px; overflow-y: auto; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ─── Page header ────────────────────────────────────────────────────── */
+    .page-header { margin-bottom: 32px; }
+    .page-header h1 {
+      font-family: var(--font-head);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    .page-header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+
+    /* ─── Stat Cards ─────────────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 28px; }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .stat-card.total::before  { background: var(--accent); }
+    .stat-card.pos::before    { background: var(--pos); }
+    .stat-card.neg::before    { background: var(--neg); }
+    .stat-card.neu::before    { background: var(--neu); }
+
+    .stat-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px; }
+    .stat-value { font-family: var(--font-head); font-size: 36px; font-weight: 800; line-height: 1; }
+    .stat-card.total .stat-value { color: var(--accent); }
+    .stat-card.pos   .stat-value { color: var(--pos); }
+    .stat-card.neg   .stat-value { color: var(--neg); }
+    .stat-card.neu   .stat-value { color: var(--neu); }
+    .stat-sub { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+    /* ─── Chart Grid ─────────────────────────────────────────────────────── */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .chart-card.full-width { grid-column: 1 / -1; }
+    .chart-title {
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+    canvas { max-height: 260px; }
+
+    /* ─── Analyze Section ────────────────────────────────────────────────── */
+    .analyze-grid { display: grid; grid-template-columns: 1fr 400px; gap: 24px; align-items: start; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+    .card h2 {
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+
+    textarea, input[type="text"], select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      padding: 12px 14px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.18s;
+    }
+    textarea:focus, input[type="text"]:focus, select:focus { border-color: var(--accent); }
+    textarea { min-height: 130px; }
+
+    label { font-size: 13px; font-weight: 500; color: var(--muted); display: block; margin: 14px 0 6px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 22px;
+      border-radius: 9px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.18s ease;
+    }
+    .btn-primary { background: var(--accent); color: #0b0d12; }
+    .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-secondary:hover { background: #2e3445; }
+    .btn-danger { background: rgba(248,113,113,0.15); color: var(--neg); border: 1px solid rgba(248,113,113,0.3); }
+    .btn-danger:hover { background: rgba(248,113,113,0.25); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+    /* Result Card */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 20px;
+      display: none;
+    }
+    .result-card.visible { display: block; animation: fadeIn 0.3s ease; }
+    .result-sentiment {
+      font-family: var(--font-head);
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .result-sentiment.Positive { color: var(--pos); }
+    .result-sentiment.Negative { color: var(--neg); }
+    .result-sentiment.Neutral  { color: var(--neu); }
+
+    .result-conf { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+
+    .score-bar-wrap { margin-bottom: 10px; }
+    .score-bar-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+    .score-bar-track { height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+    .fill-pos { background: var(--pos); }
+    .fill-neg { background: var(--neg); }
+    .fill-neu { background: var(--neu); }
+
+    /* ─── History Table ───────────────────────────────────────────────────── */
+    .filter-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: flex-end; }
+    .filter-row > * { flex: 1; min-width: 140px; }
+    .filter-row .btn { flex: none; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.12s; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody td { padding: 11px 14px; color: var(--text); }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .badge-pos { background: rgba(52,211,153,0.15); color: var(--pos); }
+    .badge-neg { background: rgba(248,113,113,0.15); color: var(--neg); }
+    .badge-neu { background: rgba(148,163,184,0.15); color: var(--neu); }
+
+    .text-truncate { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .pagination { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; align-items: center; }
+    .page-btn {
+      padding: 6px 14px;
+      border-radius: 7px;
+      background: var(--border);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      font-family: var(--font-body);
+    }
+    .page-btn:hover { background: #2e3445; }
+    .page-btn.active { background: var(--accent); color: #0b0d12; font-weight: 700; }
+    .page-info { font-size: 13px; color: var(--muted); }
+
+    /* ─── CSV Upload ──────────────────────────────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); color: var(--accent); }
+    .drop-zone .drop-icon { font-size: 36px; margin-bottom: 12px; }
+    .drop-zone p { font-size: 14px; }
+    .drop-zone small { font-size: 12px; margin-top: 6px; display: block; }
+    #csv-input { display: none; }
+
+    /* ─── Toast ──────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 14px;
+      color: var(--text);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.25s ease;
+      pointer-events: none;
+      max-width: 320px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ─── Spinner ─────────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* ─── Animations ─────────────────────────────────────────────────────── */
+    @keyframes spin   { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* ─── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 1100px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .analyze-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 780px) {
+      .sidebar { display: none; }
+      .main { padding: 24px 18px; }
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <span class="logo-dot"></span>
+      SentimentIQ
+    </div>
+
+    <button class="nav-link active" onclick="showPage('dashboard')">
+      <span class="nav-icon">📊</span> Dashboard
+    </button>
+    <button class="nav-link" onclick="showPage('analyze')">
+      <span class="nav-icon">🔍</span> Analyze
+    </button>
+    <button class="nav-link" onclick="showPage('upload')">
+      <span class="nav-icon">📂</span> Bulk Upload
+    </button>
+    <button class="nav-link" onclick="showPage('history')">
+      <span class="nav-icon">🕐</span> History
+    </button>
+
+    <div class="sidebar-footer">
+      <strong style="color:var(--text)">AI Sentiment Dashboard</strong><br/>
+      LaunchED Internship Capstone<br/>
+      Powered by RoBERTa + Flask
+    </div>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- ══ Dashboard ══════════════════════════════════════════════════════ -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <h1>Dashboard</h1>
+        <p>Live overview of customer sentiment trends and distribution.</p>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="stat-grid">
+        <div class="stat-card total">
+          <div class="stat-label">Total Feedback</div>
+          <div class="stat-value" id="stat-total">—</div>
+          <div class="stat-sub">All time</div>
+        </div>
+        <div class="stat-card pos">
+          <div class="stat-label">Positive</div>
+          <div class="stat-value" id="stat-pos">—</div>
+          <div class="stat-sub" id="stat-pos-pct"></div>
+        </div>
+        <div class="stat-card neg">
+          <div class="stat-label">Negative</div>
+          <div class="stat-value" id="stat-neg">—</div>
+          <div class="stat-sub" id="stat-neg-pct"></div>
+        </div>
+        <div class="stat-card neu">
+          <div class="stat-label">Neutral</div>
+          <div class="stat-value" id="stat-neu">—</div>
+          <div class="stat-sub" id="stat-neu-pct"></div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Sentiment Distribution</div>
+          <canvas id="chart-donut"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Average Confidence by Sentiment</div>
+          <canvas id="chart-conf"></canvas>
+        </div>
+        <div class="chart-card full-width">
+          <div class="chart-title">Daily Sentiment Trend (Last 30 Days)</div>
+          <canvas id="chart-trend" style="max-height:300px"></canvas>
+        </div>
+      </div>
+
+      <!-- Recent -->
+      <div class="card">
+        <h2>Recent Feedback</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Text</th>
+              <th>Sentiment</th>
+              <th>Confidence</th>
+              <th>Category</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="recent-tbody">
+            <tr><td colspan="5" style="color:var(--muted);padding:20px 14px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ Analyze ════════════════════════════════════════════════════════ -->
+    <div class="page" id="page-analyze">
+      <div class="page-header">
+        <h1>Analyze Feedback</h1>
+        <p>Classify a single piece of customer feedback in real-time.</p>
+      </div>
+
+      <div class="analyze-grid">
+        <div class="card">
+          <h2>Enter Feedback Text</h2>
+
+          <label for="input-text">Customer Feedback</label>
+          <textarea id="input-text" placeholder="e.g. The product quality exceeded my expectations…"></textarea>
+
+          <label for="input-category">Category (optional)</label>
+          <select id="input-category">
+            <option value="General">General</option>
+            <option value="Product">Product</option>
+            <option value="Delivery">Delivery</option>
+            <option value="Support">Support</option>
+            <option value="Pricing">Pricing</option>
+            <option value="UX/UI">UX / UI</option>
+          </select>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-analyze" onclick="analyzeText()">
+              ✨ Analyze Sentiment
+            </button>
+            <button class="btn btn-secondary" onclick="clearAnalyze()">Clear</button>
+          </div>
+
+          <!-- Result -->
+          <div class="result-card" id="result-card">
+            <div class="result-sentiment" id="result-label">Positive</div>
+            <div class="result-conf" id="result-conf">Confidence: 92.4%</div>
+
+            <div class="score-bar-wrap">
+              <div class="score-bar-label">
+                <span>😊 Positive</span><span id="score-pos-val">0%</span>
+              </div>
+              <div class="score-bar-track">
+                <div class="score-bar-fill fill-pos" id="score-pos-bar" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="score-bar-wrap">
+              <div class="score-bar-label">
+                <span>😠 Negative</span><span id="score-neg-val">0%</span>
+              </div>
+              <div class="score-bar-track">
+                <div class="score-bar-fill fill-neg" id="score-neg-bar" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="score-bar-wrap">
+              <div class="score-bar-label">
+                <span>😐 Neutral</span><span id="score-neu-val">0%</span>
+              </div>
+              <div class="score-bar-track">
+                <div class="score-bar-fill fill-neu" id="score-neu-bar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tips panel -->
+        <div class="card">
+          <h2>Tips &amp; Examples</h2>
+          <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:18px">
+            Try pasting real customer reviews, support tickets, or social media comments.
+            The model handles sarcasm, informal language, and mixed sentiments.
+          </p>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-secondary" style="text-align:left;font-size:13px" onclick="fillExample('The delivery was incredibly fast and the product looks exactly as described. Very happy!')">
+              😊 Positive example
+            </button>
+            <button class="btn btn-secondary" style="text-align:left;font-size:13px" onclick="fillExample('Terrible experience. The item arrived damaged and customer support was completely unhelpful.')">
+              😠 Negative example
+            </button>
+            <button class="btn btn-secondary" style="text-align:left;font-size:13px" onclick="fillExample('Package arrived on time. Product is okay, nothing special but does what it claims.')">
+              😐 Neutral example
+            </button>
+          </div>
+
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--muted);line-height:1.8">
+              <strong style="color:var(--text)">Model:</strong> RoBERTa (cardiffnlp)<br/>
+              <strong style="color:var(--text)">Classes:</strong> Positive · Negative · Neutral<br/>
+              <strong style="color:var(--text)">Max tokens:</strong> 512
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Bulk Upload ════════════════════════════════════════════════════ -->
+    <div class="page" id="page-upload">
+      <div class="page-header">
+        <h1>Bulk Upload</h1>
+        <p>Upload a CSV file with a <code style="background:var(--border);padding:2px 6px;border-radius:4px">text</code> column to analyze many feedbacks at once.</p>
+      </div>
+
+      <div class="card" style="max-width:640px">
+        <h2>Upload CSV File</h2>
+
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
+          <div class="drop-icon">📁</div>
+          <p>Click to browse or drag &amp; drop your CSV here</p>
+          <small>Required column: <strong>text</strong> &nbsp;|&nbsp; Optional: <strong>category</strong> &nbsp;|&nbsp; Max 500 rows</small>
+        </div>
+        <input type="file" id="csv-input" accept=".csv" onchange="handleFileSelect(event)" />
+
+        <div id="upload-file-name" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-upload" onclick="uploadCSV()" disabled>
+            📤 Upload &amp; Analyze
+          </button>
+        </div>
+
+        <div id="upload-result" style="margin-top:20px"></div>
+
+        <!-- CSV template download -->
+        <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">
+          <strong style="color:var(--text)">CSV Format Example:</strong>
+          <pre style="margin-top:10px;background:var(--surface);padding:14px;border-radius:8px;font-size:12px;overflow-x:auto">text,category
+"Great product, fast delivery!",Product
+"Support team was unhelpful.",Support
+"It's okay, nothing special.",General</pre>
+          <button class="btn btn-secondary" style="margin-top:12px;font-size:13px" onclick="downloadTemplate()">
+            ⬇️ Download Template CSV
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ History ════════════════════════════════════════════════════════ -->
+    <div class="page" id="page-history">
+      <div class="page-header">
+        <h1>Feedback History</h1>
+        <p>Browse, filter, and export all analyzed feedback records.</p>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-row">
+        <div>
+          <label>Search text</label>
+          <input type="text" id="filter-search" placeholder="Search keywords…" />
+        </div>
+        <div>
+          <label>Sentiment</label>
+          <select id="filter-sentiment">
+            <option value="">All</option>
+            <option value="Positive">Positive</option>
+            <option value="Negative">Negative</option>
+            <option value="Neutral">Neutral</option>
+          </select>
+        </div>
+        <div>
+          <label>Last N days</label>
+          <select id="filter-days">
+            <option value="">All time</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadHistory(1)">🔎 Filter</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">⬇️ Export CSV</button>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Text</th>
+              <th>Sentiment</th>
+              <th>Confidence</th>
+              <th>Category</th>
+              <th>Source</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="8" style="color:var(--muted);padding:24px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+  /* ─── Config ──────────────────────────────────────────────────────────── */
+  const API = '';   // same origin; if backend on different port: 'http://localhost:5000'
+
+  /* ─── Charts ──────────────────────────────────────────────────────────── */
+  let donutChart, confChart, trendChart;
+
+  const CHART_DEFAULTS = {
+    color: '#e8eaf0',
+    font: { family: 'DM Sans, sans-serif', size: 12 },
+  };
+  Chart.defaults.color = CHART_DEFAULTS.color;
+  Chart.defaults.font  = CHART_DEFAULTS.font;
+
+  function initCharts(stats) {
+    const dist = stats.distribution || {};
+    const pos = dist.Positive || 0, neg = dist.Negative || 0, neu = dist.Neutral || 0;
+
+    /* Donut */
+    if (donutChart) donutChart.destroy();
+    donutChart = new Chart(document.getElementById('chart-donut'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Positive', 'Negative', 'Neutral'],
+        datasets: [{
+          data: [pos, neg, neu],
+          backgroundColor: ['#34d399','#f87171','#94a3b8'],
+          borderColor: '#191d28',
+          borderWidth: 4,
+          hoverOffset: 8,
+        }],
+      },
+      options: {
+        plugins: { legend: { position: 'bottom', labels: { padding: 16, boxWidth: 12 } } },
+        cutout: '70%',
+      },
+    });
+
+    /* Confidence bar chart */
+    const conf = stats.avg_confidence || {};
+    if (confChart) confChart.destroy();
+    confChart = new Chart(document.getElementById('chart-conf'), {
+      type: 'bar',
+      data: {
+        labels: ['Positive','Negative','Neutral'],
+        datasets: [{
+          label: 'Avg Confidence (%)',
+          data: [conf.Positive||0, conf.Negative||0, conf.Neutral||0],
+          backgroundColor: ['rgba(52,211,153,0.7)','rgba(248,113,113,0.7)','rgba(148,163,184,0.7)'],
+          borderRadius: 6,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { min: 0, max: 100, grid: { color: '#252a38' }, ticks: { callback: v => v + '%' } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+
+    /* Trend line chart */
+    const trend = stats.trend || [];
+    const labels = trend.map(r => r.date);
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(document.getElementById('chart-trend'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Positive', data: trend.map(r => r.Positive || 0),
+            borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.12)',
+            tension: 0.4, fill: true, pointRadius: 3,
+          },
+          {
+            label: 'Negative', data: trend.map(r => r.Negative || 0),
+            borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.08)',
+            tension: 0.4, fill: true, pointRadius: 3,
+          },
+          {
+            label: 'Neutral', data: trend.map(r => r.Neutral || 0),
+            borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.08)',
+            tension: 0.4, fill: true, pointRadius: 3,
+          },
+        ],
+      },
+      options: {
+        plugins: { legend: { position: 'bottom', labels: { padding: 16, boxWidth: 12 } } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: '#252a38' } },
+          x: { grid: { display: false } },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+    });
+  }
+
+  /* ─── Dashboard data ──────────────────────────────────────────────────── */
+  async function loadDashboard() {
+    try {
+      const r = await fetch(`${API}/api/stats`);
+      const stats = await r.json();
+
+      const d = stats.distribution || {};
+      const total = stats.total || 0;
+      const pct = v => total ? (v/total*100).toFixed(1)+'%' : '0%';
+
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-pos').textContent   = d.Positive || 0;
+      document.getElementById('stat-neg').textContent   = d.Negative || 0;
+      document.getElementById('stat-neu').textContent   = d.Neutral  || 0;
+      document.getElementById('stat-pos-pct').textContent = pct(d.Positive||0) + ' of total';
+      document.getElementById('stat-neg-pct').textContent = pct(d.Negative||0) + ' of total';
+      document.getElementById('stat-neu-pct').textContent = pct(d.Neutral||0)  + ' of total';
+
+      initCharts(stats);
+      renderRecentTable(stats.recent || []);
+    } catch(e) {
+      showToast('⚠️ Could not load dashboard data. Is the backend running?');
+    }
+  }
+
+  function renderRecentTable(records) {
+    const tbody = document.getElementById('recent-tbody');
+    if (!records.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:20px 14px">No records yet. Analyze some feedback to get started!</td></tr>';
+      return;
+    }
+    tbody.innerHTML = records.map(r => `
+      <tr>
+        <td class="text-truncate">${esc(r.text)}</td>
+        <td><span class="badge badge-${r.sentiment.toLowerCase().slice(0,3)}">${r.sentiment}</span></td>
+        <td>${r.confidence}%</td>
+        <td>${esc(r.category)}</td>
+        <td>${r.created_at}</td>
+      </tr>`).join('');
+  }
+
+  /* ─── Analyze ─────────────────────────────────────────────────────────── */
+  async function analyzeText() {
+    const text     = document.getElementById('input-text').value.trim();
+    const category = document.getElementById('input-category').value;
+    if (!text) { showToast('Please enter some feedback text.'); return; }
+
+    const btn = document.getElementById('btn-analyze');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+
+    try {
+      const r = await fetch(`${API}/api/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, category }),
+      });
+      const data = await r.json();
+      if (!r.ok) { showToast('Error: ' + (data.error || r.status)); return; }
+
+      const rec = data.record;
+      const card = document.getElementById('result-card');
+      document.getElementById('result-label').textContent = rec.sentiment;
+      document.getElementById('result-label').className   = 'result-sentiment ' + rec.sentiment;
+      document.getElementById('result-conf').textContent  = `Confidence: ${rec.confidence}%`;
+
+      setBar('pos', rec.positive_score);
+      setBar('neg', rec.negative_score);
+      setBar('neu', rec.neutral_score);
+
+      card.classList.add('visible');
+      showToast(`✅ Classified as ${rec.sentiment} (${rec.confidence}% confidence)`);
+    } catch(e) {
+      showToast('⚠️ Network error. Check that the backend is running.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '✨ Analyze Sentiment';
+    }
+  }
+
+  function setBar(key, val) {
+    document.getElementById(`score-${key}-val`).textContent = val + '%';
+    document.getElementById(`score-${key}-bar`).style.width = val + '%';
+  }
+
+  function clearAnalyze() {
+    document.getElementById('input-text').value = '';
+    document.getElementById('result-card').classList.remove('visible');
+  }
+
+  function fillExample(text) {
+    document.getElementById('input-text').value = text;
+    showPage('analyze');
+  }
+
+  /* ─── CSV Upload ──────────────────────────────────────────────────────── */
+  let selectedFile = null;
+
+  function handleFileSelect(e) {
+    selectedFile = e.target.files[0];
+    if (selectedFile) {
+      document.getElementById('upload-file-name').textContent = `Selected: ${selectedFile.name}`;
+      document.getElementById('btn-upload').disabled = false;
+    }
+  }
+
+  // Drag-and-drop
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.csv')) {
+      selectedFile = file;
+      document.getElementById('upload-file-name').textContent = `Selected: ${file.name}`;
+      document.getElementById('btn-upload').disabled = false;
+    } else {
+      showToast('Please drop a .csv file.');
+    }
+  });
+
+  async function uploadCSV() {
+    if (!selectedFile) return;
+    const btn = document.getElementById('btn-upload');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Uploading…';
+
+    const form = new FormData();
+    form.append('file', selectedFile);
+
+    try {
+      const r = await fetch(`${API}/api/analyze/csv`, { method: 'POST', body: form });
+      const data = await r.json();
+      if (!r.ok) { showToast('Error: ' + (data.error || r.status)); return; }
+
+      const d = data.distribution || {};
+      document.getElementById('upload-result').innerHTML = `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:4px">
+          <div style="font-family:var(--font-head);font-size:18px;font-weight:700;margin-bottom:12px;color:var(--accent)">
+            ✅ ${data.count} records analyzed
+          </div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:14px">
+            <span style="color:var(--pos)">😊 Positive: ${(data.records||[]).filter(r=>r.sentiment==='Positive').length}</span>
+            <span style="color:var(--neg)">😠 Negative: ${(data.records||[]).filter(r=>r.sentiment==='Negative').length}</span>
+            <span style="color:var(--neu)">😐 Neutral: ${(data.records||[]).filter(r=>r.sentiment==='Neutral').length}</span>
+          </div>
+        </div>`;
+      showToast(`✅ ${data.count} records processed successfully.`);
+    } catch(e) {
+      showToast('⚠️ Upload failed. Check backend.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '📤 Upload &amp; Analyze';
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = 'text,category\n"Great product!",Product\n"Terrible service.",Support\n"It was okay.",General';
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'feedback_template.csv';
+    a.click();
+  }
+
+  /* ─── History ─────────────────────────────────────────────────────────── */
+  let currentPage = 1;
+
+  async function loadHistory(page = 1) {
+    currentPage = page;
+    const search   = document.getElementById('filter-search').value.trim();
+    const sentiment = document.getElementById('filter-sentiment').value;
+    const days     = document.getElementById('filter-days').value;
+
+    const params = new URLSearchParams({ page, per_page: 15 });
+    if (search)    params.append('search', search);
+    if (sentiment) params.append('sentiment', sentiment);
+    if (days)      params.append('days', days);
+
+    const tbody = document.getElementById('history-tbody');
+    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:24px">Loading…</td></tr>';
+
+    try {
+      const r = await fetch(`${API}/api/history?${params}`);
+      const data = await r.json();
+
+      if (!data.records.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:24px">No records match your filters.</td></tr>';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = data.records.map(rec => `
+        <tr id="row-${rec.id}">
+          <td style="color:var(--muted)">${rec.id}</td>
+          <td class="text-truncate" style="max-width:280px" title="${esc(rec.text)}">${esc(rec.text)}</td>
+          <td><span class="badge badge-${rec.sentiment.toLowerCase().slice(0,3)}">${rec.sentiment}</span></td>
+          <td>${rec.confidence}%</td>
+          <td>${esc(rec.category)}</td>
+          <td style="color:var(--muted)">${rec.source}</td>
+          <td style="color:var(--muted);white-space:nowrap">${rec.created_at}</td>
+          <td>
+            <button class="btn btn-danger" style="padding:5px 10px;font-size:12px" onclick="deleteRecord(${rec.id})">✕</button>
+          </td>
+        </tr>`).join('');
+
+      renderPagination(data.page, data.pages);
+    } catch(e) {
+      tbody.innerHTML = '<tr><td colspan="8" style="color:var(--neg);padding:24px">Failed to load history.</td></tr>';
+    }
+  }
+
+  function renderPagination(current, total) {
+    const container = document.getElementById('pagination');
+    if (total <= 1) { container.innerHTML = ''; return; }
+
+    let html = `<span class="page-info">Page ${current} of ${total}</span>`;
+    if (current > 1)     html += `<button class="page-btn" onclick="loadHistory(${current-1})">← Prev</button>`;
+    for (let i = Math.max(1,current-2); i <= Math.min(total,current+2); i++) {
+      html += `<button class="page-btn ${i===current?'active':''}" onclick="loadHistory(${i})">${i}</button>`;
+    }
+    if (current < total) html += `<button class="page-btn" onclick="loadHistory(${current+1})">Next →</button>`;
+    container.innerHTML = html;
+  }
+
+  async function deleteRecord(id) {
+    if (!confirm('Delete this record?')) return;
+    const r = await fetch(`${API}/api/history/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      document.getElementById(`row-${id}`)?.remove();
+      showToast('Record deleted.');
+    } else {
+      showToast('Failed to delete record.');
+    }
+  }
+
+  function exportCSV() {
+    window.location.href = `${API}/api/export`;
+  }
+
+  /* ─── Navigation ──────────────────────────────────────────────────────── */
+  function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(l => {
+      if (l.getAttribute('onclick')?.includes(name)) l.classList.add('active');
+    });
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'history')   loadHistory(1);
+  }
+
+  /* ─── Toast ───────────────────────────────────────────────────────────── */
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+  }
+
+  /* ─── Utils ───────────────────────────────────────────────────────────── */
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ─── Init ────────────────────────────────────────────────────────────── */
+  loadDashboard();
+</script>
+</body>
+</html>
