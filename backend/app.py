@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from database import init_db, SessionLocal, Feedback
-from model import analyzer
+from model import analyze_sentiment
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 app = Flask(
@@ -76,7 +76,7 @@ def index():
 
 @app.route("/healthz")
 def health():
-    return jsonify({"status": "ok", "model": analyzer.model_name_used or "not loaded"})
+    return jsonify({"status": "ok", "model": "textblob"})
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -90,7 +90,7 @@ def analyze_single():
     category = data.get("category", "General")
     source = data.get("source", "manual")
 
-    result = analyzer.analyze(text)
+    result = analyze_sentiment(text)
 
     db = get_db()
     fb = save_feedback(db, text, result, source=source, category=category)
@@ -115,7 +115,7 @@ def analyze_batch():
         if not text:
             continue
         category = item.get("category", "General") if isinstance(item, dict) else "General"
-        result = analyzer.analyze(text)
+       result = analyze_sentiment(text)
         fb = save_feedback(db, text, result, source="batch", category=category)
         records.append(fb.to_dict())
     db.close()
@@ -155,7 +155,7 @@ def analyze_csv():
     for _, row in df.iterrows():
         text = row["text"].strip()
         category = str(row.get("category", "General"))
-        result = analyzer.analyze(text)
+        result = analyze_sentiment(text)
         fb = save_feedback(db, text, result, source="csv", category=category)
         records.append(fb.to_dict())
     db.close()
@@ -328,5 +328,5 @@ def export_csv():
 # ── Run ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # Pre-load the model so the first request is fast
-    #analyzer.load()
+    
     app.run(host="0.0.0.0", port=5000, debug=False)
